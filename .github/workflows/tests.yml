@@ -17,14 +17,6 @@ jobs:
 
   # ------------------------------ META ------------------------------
 
-  # ------------------------------
-  meta-version-sync:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Versions agree across the monorepo
-        run: bash tests/check_versions.sh
-
   # TODO: What is this for?
   # ------------------------------
   # meta-pre-commit:
@@ -43,7 +35,7 @@ jobs:
   #     - name: Run pre-commit
   #       run: pre-commit run --all-files
 
-  # ------------------------------ Native ------------------------------
+  # ------------------------------ NATIVE ------------------------------
 
   # ------------------------------
   native-linux-build:
@@ -143,14 +135,150 @@ jobs:
           name: ${{ matrix.name }}
 
   # ------------------------------
-  native-publish:
-    name: Publish Github release
-    needs:
-      - native-linux-build
-      - native-macos-build
-      - native-windows-build
+  native-sanitizer:
+    name: 'Native Sanitizer'
     runs-on: ubuntu-latest
-    #if: success() && contains(github.ref, 'tags/v')
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install cmake
+        run: sudo apt-get install -y cmake
+      # Sanitizer flags go through CMAKE_<LANG>_FLAGS so the FetchContent'd
+      # OpenJPH objects embedded in libopenjph_c are instrumented too.
+      - name: Configure with AddressSanitizer
+        run: >
+          cmake -S native -B build-asan
+          -DCMAKE_BUILD_TYPE=Debug
+          -DOPENJPH_C_BUILD_TESTS=ON
+          -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
+          -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address"
+      - name: Build
+        run: cmake --build build-asan -j
+      - name: Run leak tests (LeakSanitizer)
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+        run: ctest --test-dir build-asan --output-on-failure
+
+  # ------------------------------
+  native-done:
+    needs: [native-linux-build, native-macos-build, native-windows-build, native-sanitizer]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Native part is done"
+
+
+  # ------------------------------ PYTHON ------------------------------
+
+  # ------------------------------
+  python-tests:
+    name: 'Python tests'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install cmake
+        run: sudo apt-get install -y cmake
+      - name: Install
+        env:
+          NATIVE_PATH: ${{ github.workspace }}/native
+        run: python -m pip install ".[test,zarr]"
+      - name: Test
+        run: pytest tests
+
+  # ------------------------------
+  python-done:
+    needs: [python-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Python part is done"
+
+  # ------------------------------ JULIA ------------------------------
+
+  # ------------------------------
+  julia-tests:
+    name: 'Julia tests'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Install cmake
+        run: sudo apt-get install -y cmake
+      # No NATIVE_PATH on purpose: this exercises build.jl's in-monorepo
+      # sibling-detection of native/ — the path a fresh monorepo build actually
+      # uses, and the one whose breakage previously shipped unnoticed.
+      - name: Test OpenJPH
+        run: julia --project=julia/OpenJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH"); Pkg.test()'
+      - name: Test ZarrCompressorJPH
+        run: julia --project=julia/ZarrCompressorJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH"); Pkg.test()'
+
+  # ------------------------------
+  julia-done:
+    needs: [julia-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Julia part is done"
+
+  # ------------------------------ INTEROP ------------------------------
+
+  # ------------------------------
+  interop-version-check:
+    name: 'Interop version check'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Versions agree across the monorepo
+        run: bash tests/check_versions.sh
+
+  # ------------------------------
+  interop-roundtrip:
+    name: 'Interop roundtrip'
+    needs: [native-done, python-done, julia-done]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Install cmake
+        run: sudo apt-get install -y cmake
+      - name: Install pyopenjph
+        env:
+          NATIVE_PATH: ${{ github.workspace }}/native
+        # Non-editable install so the built libopenjph_c.so is copied next to
+        # _backend.py (a scikit-build-core editable install leaves it in a build
+        # dir where the loader can't find it).
+        run: python -m pip install "./python[zarr]"
+      - name: Build Julia packages
+        run: julia --project=julia/ZarrCompressorJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH")'
+      - name: Cross-language Zarr interop
+        run: bash tests/interop/run.sh
+
+  # ------------------------------
+  interop-done:
+    needs: [interop-version-check, interop-roundtrip]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Interop part is done"
+
+  # ------------------------------ PUBLISH ------------------------------
+
+  # ------------------------------
+  publish-github:
+    name: Publish libs to Github
+    if: success() && contains(github.ref, 'tags/v')
+    needs: [native-done, python-done, julia-done, interop-done]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: set version (which gets used as release name)
@@ -181,91 +309,34 @@ jobs:
           draft: false
           prerelease: false
 
-  # interop:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-python@v6
-  #       with:
-  #         python-version: "3.12"
-  #     - uses: julia-actions/setup-julia@v2
-  #       with:
-  #         version: '1'
-  #     - name: Install cmake
-  #       run: sudo apt-get install -y cmake
-  #     - name: Install pyopenjph
-  #       env:
-  #         NATIVE_PATH: ${{ github.workspace }}/native
-  #       # Non-editable install so the built libopenjph_c.so is copied next to
-  #       # _backend.py (a scikit-build-core editable install leaves it in a build
-  #       # dir where the loader can't find it).
-  #       run: python -m pip install "./python[zarr]"
-  #     - name: Build Julia packages
-  #       run: julia --project=julia/ZarrCompressorJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH")'
-  #     - name: Cross-language Zarr interop
-  #       run: bash tests/interop/run.sh
-
-  # native-sanitizer:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install cmake
-  #       run: sudo apt-get install -y cmake
-  #     # Sanitizer flags go through CMAKE_<LANG>_FLAGS so the FetchContent'd
-  #     # OpenJPH objects embedded in libopenjph_c are instrumented too.
-  #     - name: Configure with AddressSanitizer
-  #       run: >
-  #         cmake -S native -B build-asan
-  #         -DCMAKE_BUILD_TYPE=Debug
-  #         -DOPENJPH_C_BUILD_TESTS=ON
-  #         -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
-  #         -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
-  #         -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
-  #         -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address"
-  #     - name: Build
-  #       run: cmake --build build-asan -j
-  #     - name: Run leak tests (LeakSanitizer)
-  #       env:
-  #         ASAN_OPTIONS: detect_leaks=1
-  #       run: ctest --test-dir build-asan --output-on-failure
-
-
-  # # ------------------------------ PYTHON ------------------------------
-
-  # python-tests:
-  #   runs-on: ubuntu-latest
-  #   defaults:
-  #     run:
-  #       working-directory: python
-  #   steps:
-  #     - uses: actions/checkout@v7
-  #     - uses: actions/setup-python@v6
-  #       with:
-  #         python-version: "3.12"
-  #     - name: Install cmake
-  #       run: sudo apt-get install -y cmake
-  #     - name: Install
-  #       env:
-  #         NATIVE_PATH: ${{ github.workspace }}/native
-  #       run: python -m pip install ".[test,zarr]"
-  #     - name: Test
-  #       run: pytest tests
-
-  # # ------------------------------ JULIA ------------------------------
-
-  # julia-tests:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: julia-actions/setup-julia@v2
-  #       with:
-  #         version: '1'
-  #     - name: Install cmake
-  #       run: sudo apt-get install -y cmake
-  #     # No NATIVE_PATH on purpose: this exercises build.jl's in-monorepo
-  #     # sibling-detection of native/ — the path a fresh monorepo build actually
-  #     # uses, and the one whose breakage previously shipped unnoticed.
-  #     - name: Test OpenJPH
-  #       run: julia --project=julia/OpenJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH"); Pkg.test()'
-  #     - name: Test ZarrCompressorJPH
-  #       run: julia --project=julia/ZarrCompressorJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH"); Pkg.test()'
+  # ------------------------------
+  # TODO: enable in a next PR that also updates the wrapper to not need a build step. Mind the `&& false`  and set needs
+  publish-pypi:
+    name: Publish to Github and Pypi
+    if: success() && startsWith(github.ref, 'refs/tags/v') && false
+    needs: [python-done, interop-done]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/openjph-bindings
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+    - uses: actions/checkout@v7
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.14'
+    - name: Download assets
+      uses: actions/download-artifact@v4
+      with:
+        path: dist
+    - name: Flatten dist dir
+      run: |
+        find dist -mindepth 2 -type f -exec mv -f '{}' dist/ ';'
+        rm -rf dist/*/
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        print-hash: true
