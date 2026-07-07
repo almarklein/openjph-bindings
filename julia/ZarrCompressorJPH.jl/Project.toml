@@ -1,0 +1,27 @@
+name = "ZarrCompressorJPH"
+uuid = "ff79b597-a8c9-4721-ab00-e93bd1206762"
+version = "0.1.0"
+authors = ["DarioSarra <dariosarra@gmail.com>"]
+
+[deps]
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+OpenJPH = "8c589a84-a498-4fe3-acea-e589744a4834"
+Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+
+# Unregistered dependency on the sibling OpenJPH package. The path form resolves
+# the monorepo for local development (no committed Manifest needed). This will
+# switch to the {url, subdir, rev} form once OpenJPH ships prebuilt binaries via
+# Artifacts.toml, so a standalone `Pkg.add(url=..., subdir=...)` also resolves.
+[sources]
+OpenJPH = {path = "../OpenJPH.jl"}
+
+[compat]
+JSON = "1.6.1"
+Test = "1.11.0"
+Zarr = "0.10.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

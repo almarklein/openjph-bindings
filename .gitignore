@@ -19,3 +19,6 @@ compile_commands.json
 *.pyd
 .venv/
 .DS_Store
+
+# Julia resolved environments — libraries do not commit Manifests
+Manifest.toml
