@@ -280,6 +280,8 @@ jobs:
     if: success() && contains(github.ref, 'tags/v')
     needs: [native-done, python-done, julia-done, interop-done]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - name: set version (which gets used as release name)
@@ -303,7 +305,7 @@ jobs:
           tag_name: ${{ env.GITHUB_SHA }}
           name: ${{ env.GITHUB_SHA }}
           files: |
-            dist/**/*.zip
+            dist/*.zip
             dist/commit-sha
           body: |
             Precompiled binary modules.
@@ -333,10 +335,10 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: dist
-    - name: Flatten dist dir
-      run: |
-        find dist -mindepth 2 -type f -exec mv -f '{}' dist/ ';'
-        rm -rf dist/*/
+    # - name: Flatten dist dir
+    #   run: |
+    #     find dist -mindepth 2 -type f -exec mv -f '{}' dist/ ';'
+    #     rm -rf dist/*/
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
