@@ -139,7 +139,7 @@ jobs:
           cmake --build build
           mkdir dist && cp ./build/*.dylib ./dist/ && cp ./include/*.h ./dist/
           cd dist
-          zip -r ../${{ env.ARCHIVE_NAME }} *"
+          zip -r ../${{ env.ARCHIVE_NAME }} *
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
