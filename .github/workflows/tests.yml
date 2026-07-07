@@ -52,6 +52,7 @@ jobs:
           #   image: manylinux_2_28_aarch64
     env:
       IMAGE: ${{ matrix.image }}
+      ARCHIVE_NAME: 'openjph_c- ${{ matrix.name }}'
     steps:
       - uses: actions/checkout@v7
       - name: Set up QEMU
@@ -68,7 +69,9 @@ jobs:
             export USER=root && \
             cmake -B build . -DCMAKE_BUILD_TYPE=Release && \
             cmake --build build  && \
-            mkdir dist && cp ./build/*.so ./dist/ && cp ./include/*.h ./dist/")
+            mkdir dist && cp ./build/*.so ./dist/ && cp ./include/*.h ./dist/ && \
+            cd dist && \
+            zip -r ../${{ env.ARCHIVE_NAME }} *")
           docker start -ai $CID
           mkdir -p dist
           docker cp $CID:/tmp/work/dist/. dist/.
@@ -76,8 +79,8 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          path: native/dist
-          name: ${{ matrix.name }}
+          path: 'native/${{ env.ARCHIVE_NAME }}'
+          name: 'native-${{ matrix.name }}'
 
   # ------------------------------
   native-windows-build:
@@ -91,6 +94,8 @@ jobs:
             os: windows-latest
           - name:  windows-aarch64
             os: windows-11-arm
+    env:
+      ARCHIVE_NAME: 'openjph_c-${{ matrix.name }}.zip'
     steps:
       - uses: actions/checkout@v7
       - name: Build
@@ -99,12 +104,14 @@ jobs:
           cmake -B build . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
           mkdir dist && cp ./build/Release/*.dll ./dist/ && cp ./include/*.h ./dist/
+          cd dist
+          7z a -tzip ../${{ env.ARCHIVE_NAME }} *;
         shell: bash
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          path: native/dist
-          name: ${{ matrix.name }}
+          path: 'native/${{ env.ARCHIVE_NAME }}'
+          name: 'native-${{ matrix.name }}'
 
   # ------------------------------
   native-macos-build:
@@ -121,6 +128,7 @@ jobs:
     env:
       # Need aligned_malloc, which is only available from 10.15+
       MACOSX_DEPLOYMENT_TARGET: "10.15"
+      ARCHIVE_NAME: 'openjph_c-${{ matrix.name }}.zip'
     steps:
       - uses: actions/checkout@v7
       - name: Build
@@ -129,11 +137,13 @@ jobs:
           cmake -B build . -DCMAKE_BUILD_TYPE=Release
           cmake --build build
           mkdir dist && cp ./build/*.dylib ./dist/ && cp ./include/*.h ./dist/
+          cd dist
+          zip -r ../${{ env.ARCHIVE_NAME }} *"
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          path: native/dist
-          name: ${{ matrix.name }}
+          path: 'native/${{ env.ARCHIVE_NAME }}'
+          name: 'native-${{ matrix.name }}'
 
   # ------------------------------
   native-sanitizer:
@@ -278,7 +288,8 @@ jobs:
   publish-github:
     name: Publish libs to Github
     if: success() && contains(github.ref, 'tags/v')
-    needs: [native-done, python-done, julia-done, interop-done]
+    #needs: [native-done, python-done, julia-done, interop-done]
+    needs: [native-done]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -292,6 +303,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: dist
+      - run: find dist -type f
       - name: Create commit-sha file
         env:
           GITHUB_SHA: ${{ github.sha }}
@@ -305,7 +317,7 @@ jobs:
           tag_name: ${{ env.GITHUB_SHA }}
           name: ${{ env.GITHUB_SHA }}
           files: |
-            dist/*.zip
+            dist/**/*.zip
             dist/commit-sha
           body: |
             Precompiled binary modules.
@@ -335,10 +347,10 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: dist
-    # - name: Flatten dist dir
-    #   run: |
-    #     find dist -mindepth 2 -type f -exec mv -f '{}' dist/ ';'
-    #     rm -rf dist/*/
+    - name: Flatten dist dir
+      run: |
+        find dist -mindepth 2 -type f -exec mv -f '{}' dist/ ';'
+        rm -rf dist/*/
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
