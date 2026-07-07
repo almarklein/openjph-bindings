@@ -83,7 +83,7 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          path: dist
+          path: native/dist
           name: ${{ matrix.name }}
 
   # ------------------------------
@@ -110,7 +110,7 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          path: dist
+          path: native/dist
           name: ${{ matrix.name }}
 
   # ------------------------------
@@ -121,9 +121,9 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - name: macos-x86_64
+          - name: macos-arm64
             os: macos-latest
-          - name: macos-aarch64
+          - name: macos-intel
             os: macos-15-intel
     env:
       # Need aligned_malloc, which is only available from 10.15+
@@ -139,7 +139,7 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          path: dist
+          path: native/dist
           name: ${{ matrix.name }}
 
   # ------------------------------
