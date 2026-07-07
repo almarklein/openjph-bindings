@@ -39,7 +39,7 @@ jobs:
 
   # ------------------------------
   native-linux-build:
-    name: native build ${{ matrix.name }}
+    name: Native build ${{ matrix.name }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -47,8 +47,9 @@ jobs:
         include:
           - name: linux-x86_64
             image: manylinux_2_28_x86_64
-          - name: linux-aarch64
-            image: manylinux_2_28_aarch64
+          # The emulated aarch64 build takes 4 minutes rather than 2. For quicker iterations within a pr, you could comment the two lines below.
+          # - name: linux-aarch64
+          #   image: manylinux_2_28_aarch64
     env:
       IMAGE: ${{ matrix.image }}
     steps:
@@ -80,7 +81,7 @@ jobs:
 
   # ------------------------------
   native-windows-build:
-    name: native build ${{ matrix.name }}
+    name: Native build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -107,7 +108,7 @@ jobs:
 
   # ------------------------------
   native-macos-build:
-    name: native build ${{ matrix.name }}
+    name: Native build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
