@@ -52,7 +52,7 @@ jobs:
           #   image: manylinux_2_28_aarch64
     env:
       IMAGE: ${{ matrix.image }}
-      ARCHIVE_NAME: 'openjph_c- ${{ matrix.name }}'
+      ARCHIVE_NAME: "openjph_c-${{ matrix.name }}.zip"
     steps:
       - uses: actions/checkout@v7
       - name: Set up QEMU
@@ -67,6 +67,7 @@ jobs:
             cp -r /tmp/src/. . && \
             rm -rf ./build && \
             export USER=root && \
+            dnf install -y zip && \
             cmake -B build . -DCMAKE_BUILD_TYPE=Release && \
             cmake --build build  && \
             mkdir dist && cp ./build/*.so ./dist/ && cp ./include/*.h ./dist/ && \
@@ -95,7 +96,7 @@ jobs:
           - name:  windows-aarch64
             os: windows-11-arm
     env:
-      ARCHIVE_NAME: 'openjph_c-${{ matrix.name }}.zip'
+      ARCHIVE_NAME: "openjph_c-${{ matrix.name }}.zip"
     steps:
       - uses: actions/checkout@v7
       - name: Build
@@ -128,7 +129,7 @@ jobs:
     env:
       # Need aligned_malloc, which is only available from 10.15+
       MACOSX_DEPLOYMENT_TARGET: "10.15"
-      ARCHIVE_NAME: 'openjph_c-${{ matrix.name }}.zip'
+      ARCHIVE_NAME: "openjph_c-${{ matrix.name }}.zip"
     steps:
       - uses: actions/checkout@v7
       - name: Build
