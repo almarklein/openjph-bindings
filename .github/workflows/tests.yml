@@ -75,7 +75,7 @@ jobs:
             export USER=root && \
             cmake -B build . -DCMAKE_BUILD_TYPE=Release && \
             cmake --build build  && \
-            mkdir dist && cp ./build/*.so ./dist/")
+            mkdir dist && cp ./build/*.so ./dist/ && cp ./include/*.h ./dist/")
           docker start -ai $CID
           mkdir -p dist
           docker cp $CID:/tmp/work/dist/. dist/.
@@ -96,7 +96,7 @@ jobs:
         include:
           - name: windows-x86_64
             os: windows-latest
-          - name:  windows-arm64
+          - name:  windows-aarch64
             os: windows-11-arm
     steps:
       - uses: actions/checkout@v7
@@ -105,7 +105,7 @@ jobs:
           cd native
           cmake -B build . -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
-          mkdir dist && cp ./build/Release/*.dll ./dist/
+          mkdir dist && cp ./build/Release/*.dll ./dist/ && cp ./include/*.h ./dist/
         shell: bash
       - name: Upload
         uses: actions/upload-artifact@v7
@@ -121,9 +121,9 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - name: macos-arm64
+          - name: macos-aarch64
             os: macos-latest
-          - name: macos-intel
+          - name: macos-x86_64
             os: macos-15-intel
     env:
       # Need aligned_malloc, which is only available from 10.15+
@@ -135,7 +135,7 @@ jobs:
           cd native
           cmake -B build . -DCMAKE_BUILD_TYPE=Release
           cmake --build build
-          mkdir dist && cp ./build/*.dylib ./dist/
+          mkdir dist && cp ./build/*.dylib ./dist/ && cp ./include/*.h ./dist/
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
@@ -150,7 +150,7 @@ jobs:
       - native-macos-build
       - native-windows-build
     runs-on: ubuntu-latest
-    if: success() && contains(github.ref, 'tags/v')
+    #if: success() && contains(github.ref, 'tags/v')
     steps:
       - uses: actions/checkout@v7
       - name: set version (which gets used as release name)
@@ -169,8 +169,10 @@ jobs:
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ env.OPENJPH_C_VERSION }}
-          name: ${{ env.OPENJPH_C_VERSION }}
+          #tag_name: ${{ env.OPENJPH_C_VERSION }}
+          #name: ${{ env.OPENJPH_C_VERSION }}
+          tag_name: ${{ env.GITHUB_SHA }}
+          name: ${{ env.GITHUB_SHA }}
           files: |
             dist/**/*.zip
             dist/commit-sha
