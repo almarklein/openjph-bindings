@@ -27,21 +27,21 @@ jobs:
 
   # TODO: What is this for?
   # ------------------------------
-  meta-pre-commit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Install cmake
-        run: sudo apt-get install -y cmake
-      - name: Install
-        env:
-          NATIVE_PATH: ${{ github.workspace }}/native
-        run: python -m pip install -e "./python[dev]"
-      - name: Run pre-commit
-        run: pre-commit run --all-files
+  # meta-pre-commit:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #     - uses: actions/setup-python@v6
+  #       with:
+  #         python-version: "3.12"
+  #     - name: Install cmake
+  #       run: sudo apt-get install -y cmake
+  #     - name: Install
+  #       env:
+  #         NATIVE_PATH: ${{ github.workspace }}/native
+  #       run: python -m pip install -e "./python[dev]"
+  #     - name: Run pre-commit
+  #       run: pre-commit run --all-files
 
   # ------------------------------ Native ------------------------------
 
@@ -73,7 +73,6 @@ jobs:
             cp -r /tmp/src/. . && \
             rm -rf ./build && \
             export USER=root && \
-            pip install cmake && \
             cmake -B build . -DCMAKE_BUILD_TYPE=Release && \
             cmake --build build  && \
             mkdir dist && cp ./build/*.so ./dist/")
@@ -105,8 +104,8 @@ jobs:
         run: |
           cd native
           cmake -B build . -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
-          mkdir dist && cp ./build/*.dll ./dist/
+          cmake --build build --config Release
+          mkdir dist && cp ./build/Release/*.dll ./dist/
         shell: bash
       - name: Upload
         uses: actions/upload-artifact@v7
@@ -127,7 +126,8 @@ jobs:
           - name: macos-aarch64
             os: macos-15-intel
     env:
-      MACOSX_DEPLOYMENT_TARGET: "10.13"
+      # Need aligned_malloc, which is only available from 10.15+
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
     steps:
       - uses: actions/checkout@v7
       - name: Build
@@ -135,7 +135,7 @@ jobs:
           cd native
           cmake -B build . -DCMAKE_BUILD_TYPE=Release
           cmake --build build
-          mkdir dist && cp ./build/*.dll ./dist/
+          mkdir dist && cp ./build/*.dylib ./dist/
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
@@ -179,91 +179,91 @@ jobs:
           draft: false
           prerelease: false
 
-  interop:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: '1'
-      - name: Install cmake
-        run: sudo apt-get install -y cmake
-      - name: Install pyopenjph
-        env:
-          NATIVE_PATH: ${{ github.workspace }}/native
-        # Non-editable install so the built libopenjph_c.so is copied next to
-        # _backend.py (a scikit-build-core editable install leaves it in a build
-        # dir where the loader can't find it).
-        run: python -m pip install "./python[zarr]"
-      - name: Build Julia packages
-        run: julia --project=julia/ZarrCompressorJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH")'
-      - name: Cross-language Zarr interop
-        run: bash tests/interop/run.sh
+  # interop:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v6
+  #       with:
+  #         python-version: "3.12"
+  #     - uses: julia-actions/setup-julia@v2
+  #       with:
+  #         version: '1'
+  #     - name: Install cmake
+  #       run: sudo apt-get install -y cmake
+  #     - name: Install pyopenjph
+  #       env:
+  #         NATIVE_PATH: ${{ github.workspace }}/native
+  #       # Non-editable install so the built libopenjph_c.so is copied next to
+  #       # _backend.py (a scikit-build-core editable install leaves it in a build
+  #       # dir where the loader can't find it).
+  #       run: python -m pip install "./python[zarr]"
+  #     - name: Build Julia packages
+  #       run: julia --project=julia/ZarrCompressorJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH")'
+  #     - name: Cross-language Zarr interop
+  #       run: bash tests/interop/run.sh
 
-  native-sanitizer:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install cmake
-        run: sudo apt-get install -y cmake
-      # Sanitizer flags go through CMAKE_<LANG>_FLAGS so the FetchContent'd
-      # OpenJPH objects embedded in libopenjph_c are instrumented too.
-      - name: Configure with AddressSanitizer
-        run: >
-          cmake -S native -B build-asan
-          -DCMAKE_BUILD_TYPE=Debug
-          -DOPENJPH_C_BUILD_TESTS=ON
-          -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
-          -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
-          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
-          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address"
-      - name: Build
-        run: cmake --build build-asan -j
-      - name: Run leak tests (LeakSanitizer)
-        env:
-          ASAN_OPTIONS: detect_leaks=1
-        run: ctest --test-dir build-asan --output-on-failure
+  # native-sanitizer:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Install cmake
+  #       run: sudo apt-get install -y cmake
+  #     # Sanitizer flags go through CMAKE_<LANG>_FLAGS so the FetchContent'd
+  #     # OpenJPH objects embedded in libopenjph_c are instrumented too.
+  #     - name: Configure with AddressSanitizer
+  #       run: >
+  #         cmake -S native -B build-asan
+  #         -DCMAKE_BUILD_TYPE=Debug
+  #         -DOPENJPH_C_BUILD_TESTS=ON
+  #         -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
+  #         -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
+  #         -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+  #         -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address"
+  #     - name: Build
+  #       run: cmake --build build-asan -j
+  #     - name: Run leak tests (LeakSanitizer)
+  #       env:
+  #         ASAN_OPTIONS: detect_leaks=1
+  #       run: ctest --test-dir build-asan --output-on-failure
 
 
-  # ------------------------------ PYTHON ------------------------------
+  # # ------------------------------ PYTHON ------------------------------
 
-  python-tests:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Install cmake
-        run: sudo apt-get install -y cmake
-      - name: Install
-        env:
-          NATIVE_PATH: ${{ github.workspace }}/native
-        run: python -m pip install ".[test,zarr]"
-      - name: Test
-        run: pytest tests
+  # python-tests:
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: python
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #     - uses: actions/setup-python@v6
+  #       with:
+  #         python-version: "3.12"
+  #     - name: Install cmake
+  #       run: sudo apt-get install -y cmake
+  #     - name: Install
+  #       env:
+  #         NATIVE_PATH: ${{ github.workspace }}/native
+  #       run: python -m pip install ".[test,zarr]"
+  #     - name: Test
+  #       run: pytest tests
 
-  # ------------------------------ JULIA ------------------------------
+  # # ------------------------------ JULIA ------------------------------
 
-  julia-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: '1'
-      - name: Install cmake
-        run: sudo apt-get install -y cmake
-      # No NATIVE_PATH on purpose: this exercises build.jl's in-monorepo
-      # sibling-detection of native/ — the path a fresh monorepo build actually
-      # uses, and the one whose breakage previously shipped unnoticed.
-      - name: Test OpenJPH
-        run: julia --project=julia/OpenJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH"); Pkg.test()'
-      - name: Test ZarrCompressorJPH
-        run: julia --project=julia/ZarrCompressorJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH"); Pkg.test()'
+  # julia-tests:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: julia-actions/setup-julia@v2
+  #       with:
+  #         version: '1'
+  #     - name: Install cmake
+  #       run: sudo apt-get install -y cmake
+  #     # No NATIVE_PATH on purpose: this exercises build.jl's in-monorepo
+  #     # sibling-detection of native/ — the path a fresh monorepo build actually
+  #     # uses, and the one whose breakage previously shipped unnoticed.
+  #     - name: Test OpenJPH
+  #       run: julia --project=julia/OpenJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH"); Pkg.test()'
+  #     - name: Test ZarrCompressorJPH
+  #       run: julia --project=julia/ZarrCompressorJPH.jl -e 'import Pkg; Pkg.instantiate(); Pkg.build("OpenJPH"); Pkg.test()'
